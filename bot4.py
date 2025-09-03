@@ -22,11 +22,12 @@ class Brokex:
             "Sec-Fetch-Site": "cross-site",
             "User-Agent": FakeUserAgent().random
         }
-        self.BASE_API = "https://proofcrypto-production.up.railway.app"
-        self.RPC_URL = "https://api.zan.top/node/v1/pharos/testnet/54b49326c9f44b6e8730dc5dd4348421"
+        self.BASE_API = "https://proof.brokex.trade"
+        self.RPC_URL = "https://testnet.dplabs-internal.com/"
+        self.PHRS_CONTRACT_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
         self.USDT_CONTRACT_ADDRESS = "0x78ac5e2d8a78a8b8e6d10c7b7274b03c10c91cef"
-        self.CLAIM_ROUTER_ADDRESS = "0x50576285BD33261DEe1aD99BF766CD8249520a58"
-        self.TRADE_ROUTER_ADDRESS = "0xDe897635870b3Dd2e097C09f1cd08841DBc3976a"
+        self.FAUCET_ROUTER_ADDRESS = "0xa7Bb3C282Ff1eFBc3F2D8fcd60AaAB3aeE3CBa49"
+        self.TRADE_ROUTER_ADDRESS = "0x34f89ca5a1c6dc4eb67dfe0af5b621185df32854"
         self.POOL_ROUTER_ADDRESS = "0x9A88d07850723267DB386C681646217Af7e220d7"
         self.ERC20_CONTRACT_ABI = json.loads('''[
             {"type":"function","name":"balanceOf","stateMutability":"view","inputs":[{"name":"address","type":"address"}],"outputs":[{"name":"","type":"uint256"}]},
@@ -138,6 +139,12 @@ class Brokex:
             { "name": "ETH_USDT", "desimal": 1 },
             { "name": "SOL_USDT", "desimal": 10 },
             { "name": "XRP_USDT", "desimal": 14 },
+            { "name": "AVAX_USDT", "desimal": 5 },
+            # { "name": "DOGE_USDT", "desimal": 3 },
+            { "name": "TRX_USDT", "desimal": 15 },
+            { "name": "ADA_USDT", "desimal": 16 },
+            { "name": "SUI_USDT", "desimal": 90 },
+            { "name": "LINK_USDT", "desimal": 2 },
         ]
         self.proxies = []
         self.proxy_index = 0
@@ -173,7 +180,7 @@ class Brokex:
         print(Fore.YELLOW + Style.BRIGHT + "    🧑‍💻 Author     : YetiDAO")
         print(Fore.YELLOW + Style.BRIGHT + "    🌐 Status     : Running & Monitoring...")
         print(Fore.CYAN + Style.BRIGHT + "    ────────────────────────────────")
-        print(Fore.MAGENTA + Style.BRIGHT + "    🧬 Powered by Cryptodai3 × YetiDAO | Buddy v2.0 🚀")
+        print(Fore.MAGENTA + Style.BRIGHT + "    🧬 Powered by Cryptodai3 × YetiDAO | Buddy v2.2 🚀")
         print(Fore.LIGHTGREEN_EX + Style.BRIGHT + "═" * 60 + "\n")
 
     def format_seconds(self, seconds):
@@ -294,7 +301,7 @@ class Brokex:
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
 
-            if contract_address == "PHRS":
+            if contract_address == self.PHRS_CONTRACT_ADDRESS:
                 balance = web3.eth.get_balance(address)
                 decimals = 18
             else:
@@ -378,7 +385,10 @@ class Brokex:
             except TransactionNotFound:
                 pass
             except Exception as e:
-                pass
+                self.log(
+                    f"{Fore.CYAN + Style.BRIGHT}   Message :{Style.RESET_ALL}"
+                    f"{Fore.YELLOW + Style.BRIGHT} [Attempt {attempt + 1}] Send TX Error: {str(e)} {Style.RESET_ALL}"
+                )
             await asyncio.sleep(2 ** attempt)
         raise Exception("Transaction Hash Not Found After Maximum Retries")
 
@@ -390,7 +400,10 @@ class Brokex:
             except TransactionNotFound:
                 pass
             except Exception as e:
-                pass
+                self.log(
+                    f"{Fore.CYAN + Style.BRIGHT}   Message :{Style.RESET_ALL}"
+                    f"{Fore.YELLOW + Style.BRIGHT} [Attempt {attempt + 1}] Wait for Receipt Error: {str(e)} {Style.RESET_ALL}"
+                )
             await asyncio.sleep(2 ** attempt)
         raise Exception("Transaction Receipt Not Found After Maximum Retries")
         
@@ -398,7 +411,7 @@ class Brokex:
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
 
-            contract_address = web3.to_checksum_address(self.CLAIM_ROUTER_ADDRESS)
+            contract_address = web3.to_checksum_address(self.FAUCET_ROUTER_ADDRESS)
             token_contract = web3.eth.contract(address=contract_address, abi=self.ERC20_CONTRACT_ABI)
             claim_data = token_contract.functions.hasClaimed(web3.to_checksum_address(address)).call()
 
@@ -414,7 +427,7 @@ class Brokex:
         try:
             web3 = await self.get_web3_with_check(address, use_proxy)
 
-            contract_address = web3.to_checksum_address(self.CLAIM_ROUTER_ADDRESS)
+            contract_address = web3.to_checksum_address(self.FAUCET_ROUTER_ADDRESS)
             token_contract = web3.eth.contract(address=contract_address, abi=self.ERC20_CONTRACT_ABI)
 
             claim_data = token_contract.functions.claim()
@@ -424,7 +437,7 @@ class Brokex:
             max_fee = max_priority_fee
 
             claim_tx = claim_data.build_transaction({
-                "from": address,
+                "from": web3.to_checksum_address(address),
                 "gas": int(estimated_gas * 1.2),
                 "maxFeePerGas": int(max_fee),
                 "maxPriorityFeePerGas": int(max_priority_fee),
@@ -513,7 +526,9 @@ class Brokex:
             
             open_amount = int(self.open_amount * (10 ** decimals))
 
-            await self.approving_token(account, address, self.TRADE_ROUTER_ADDRESS, asset_address, open_amount, use_proxy)
+            await self.approving_token(account, address, self.POOL_ROUTER_ADDRESS, asset_address, self.open_amount, use_proxy)
+
+            await self.approving_token(account, address, self.TRADE_ROUTER_ADDRESS, asset_address, self.open_amount, use_proxy)
 
             proof = await self.get_proof(address, pair, use_proxy)
             if not proof:
@@ -599,7 +614,7 @@ class Brokex:
             
             deposit_lp_amount = int(self.deposit_lp_amount * (10 ** decimals))
 
-            await self.approving_token(account, address, self.POOL_ROUTER_ADDRESS, asset_address, deposit_lp_amount, use_proxy)
+            await self.approving_token(account, address, self.POOL_ROUTER_ADDRESS, asset_address, self.deposit_lp_amount, use_proxy)
 
             token_contract = web3.eth.contract(address=web3.to_checksum_address(self.POOL_ROUTER_ADDRESS), abi=self.BROKEX_CONTRACT_ABI)
 
@@ -951,7 +966,7 @@ class Brokex:
                     continue
                 return None
         
-    async def process_check_connection(self, address: int, use_proxy: bool, rotate_proxy: bool):
+    async def process_check_connection(self, address: str, use_proxy: bool, rotate_proxy: bool):
         while True:
             proxy = self.get_next_proxy_for_account(address) if use_proxy else None
             self.log(
@@ -1116,7 +1131,7 @@ class Brokex:
     async def process_option_1(self, account: str, address: str, use_proxy):
         self.log(
             f"{Fore.MAGENTA+Style.BRIGHT} ● {Style.RESET_ALL}"
-            f"{Fore.GREEN+Style.BRIGHT} Claim Faucet{Style.RESET_ALL}"
+            f"{Fore.GREEN+Style.BRIGHT}Claim Faucet{Style.RESET_ALL}"
         )
 
         await self.process_perform_claim_faucet(account, address, use_proxy)
@@ -1218,10 +1233,11 @@ class Brokex:
             size = open_data["sizeUsd"]
 
             name = (
-                "BTC_USDT" if pair == 0 else 
-                "ETH_USDT" if pair == 1 else 
-                "SOL_USDT" if pair == 10 else 
-                "XRP_USDT" if pair == 14 else 
+                "BTC_USDT" if pair == 0 else "ETH_USDT" if pair == 1 else 
+                "SOL_USDT" if pair == 10 else "XRP_USDT" if pair == 14 else 
+                "AVAX_USDT" if pair == 5 else "DOGE_USDT" if pair == 3 else 
+                "TRX_USDT" if pair == 15 else "ADA_USDT" if pair == 16 else 
+                "SUI_USDT" if pair == 90 else "LINK_USDT" if pair == 2 else 
                 "NaN_USDT"
             )
             formatted_size = size / 10**6
@@ -1318,77 +1334,81 @@ class Brokex:
     async def process_accounts(self, account: str, address: str, option: int, use_proxy: bool, rotate_proxy: bool):
         is_valid = await self.process_check_connection(address, use_proxy, rotate_proxy)
         if is_valid:
-            web3 = await self.get_web3_with_check(address, use_proxy)
-            if not web3:
+            
+            try:
+                web3 = await self.get_web3_with_check(address, use_proxy)
+            except Exception as e:
                 self.log(
                     f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
                     f"{Fore.RED+Style.BRIGHT} Web3 Not Connected {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
                 )
                 return
             
             self.used_nonce[address] = web3.eth.get_transaction_count(address, "pending")
             
-        if option == 1:
-            self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
-                f"{Fore.BLUE+Style.BRIGHT} Claim Faucet {Style.RESET_ALL}"
-            )
-            
-            await self.process_option_1(account, address, use_proxy)
+            if option == 1:
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
+                    f"{Fore.BLUE+Style.BRIGHT} Claim Faucet {Style.RESET_ALL}"
+                )
+                
+                await self.process_option_1(account, address, use_proxy)
 
-        elif option == 2:
-            self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
-                f"{Fore.BLUE+Style.BRIGHT} Open Potition {Style.RESET_ALL}"
-            )
+            elif option == 2:
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
+                    f"{Fore.BLUE+Style.BRIGHT} Open Potition {Style.RESET_ALL}"
+                )
 
-            await self.process_option_2(account, address, use_proxy)
-
-        elif option == 3:
-            self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
-                f"{Fore.BLUE+Style.BRIGHT} Close Potition {Style.RESET_ALL}"
-            )
-
-            await self.process_option_3(account, address, use_proxy)
-
-        elif option == 4:
-            self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
-                f"{Fore.BLUE+Style.BRIGHT} Deposit Liquidity {Style.RESET_ALL}"
-            )
-
-            await self.process_option_4(account, address, use_proxy)
-
-        elif option == 5:
-            self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
-                f"{Fore.BLUE+Style.BRIGHT} Withdraw Liquidity {Style.RESET_ALL}"
-            )
-
-            await self.process_option_5(account, address, use_proxy)
-
-        else:
-            self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
-                f"{Fore.BLUE+Style.BRIGHT} Run All Features {Style.RESET_ALL}"
-            )
-
-            await self.process_option_1(account, address, use_proxy)
-            await asyncio.sleep(5)
-            
-            if self.potition_option == 1:
                 await self.process_option_2(account, address, use_proxy)
-            elif self.potition_option == 2:
+
+            elif option == 3:
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
+                    f"{Fore.BLUE+Style.BRIGHT} Close Potition {Style.RESET_ALL}"
+                )
+
                 await self.process_option_3(account, address, use_proxy)
 
-            await asyncio.sleep(5)
+            elif option == 4:
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
+                    f"{Fore.BLUE+Style.BRIGHT} Deposit Liquidity {Style.RESET_ALL}"
+                )
 
-            if self.lp_option == 1:
                 await self.process_option_4(account, address, use_proxy)
 
-            elif self.lp_option == 2:
+            elif option == 5:
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
+                    f"{Fore.BLUE+Style.BRIGHT} Withdraw Liquidity {Style.RESET_ALL}"
+                )
+
                 await self.process_option_5(account, address, use_proxy)
+
+            else:
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Option  :{Style.RESET_ALL}"
+                    f"{Fore.BLUE+Style.BRIGHT} Run All Features {Style.RESET_ALL}"
+                )
+
+                await self.process_option_1(account, address, use_proxy)
+                await asyncio.sleep(5)
+                
+                if self.potition_option == 1:
+                    await self.process_option_2(account, address, use_proxy)
+                elif self.potition_option == 2:
+                    await self.process_option_3(account, address, use_proxy)
+
+                await asyncio.sleep(5)
+
+                if self.lp_option == 1:
+                    await self.process_option_4(account, address, use_proxy)
+
+                elif self.lp_option == 2:
+                    await self.process_option_5(account, address, use_proxy)
 
     async def main(self):
         try:
